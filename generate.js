@@ -672,13 +672,36 @@ function downloadSVG() {
   URL.revokeObjectURL(a.href);
 }
 
+// ── URL Params ──
+function stateToURL() {
+  var params = new URLSearchParams();
+  params.set('p', state.palette);
+  params.set('f', state.fonts);
+  params.set('l', state.layout);
+  params.set('c', state.center);
+  params.set('s', state.seed);
+  history.replaceState(null, '', '?' + params.toString());
+}
+
+function stateFromURL() {
+  var params = new URLSearchParams(window.location.search);
+  if (params.has('p')) state.palette = Math.min(parseInt(params.get('p'), 10) || 0, PALETTES.length - 1);
+  if (params.has('f')) state.fonts = Math.min(parseInt(params.get('f'), 10) || 0, FONT_SETS.length - 1);
+  if (params.has('l')) state.layout = Math.min(parseInt(params.get('l'), 10) || 0, LAYOUTS.length - 1);
+  if (params.has('c')) state.center = Math.min(parseInt(params.get('c'), 10) || 0, CENTER_MODES.length - 1);
+  if (params.has('s')) state.seed = parseInt(params.get('s'), 10) || 42;
+}
+
 function regenerate() {
+  stateToURL();
   var placements = placeWords();
   renderSVG(placements);
 }
 
 // ── Init ──
+stateFromURL();
 buildToggles();
+updateToggles();
 if (document.fonts && document.fonts.ready) {
   document.fonts.ready.then(function() { regenerate(); });
 } else {
