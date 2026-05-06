@@ -1,0 +1,10 @@
+{
+  "name": "wordcloud",
+  "version": "1.0.0",
+  "description": "Beautiful word cloud generator for A4 landscape",
+  "main": "generate.js",
+  "scripts": {
+    "generate": "node generate.js",
+    "start": "node generate.js && open index.html"
+  }
+}
