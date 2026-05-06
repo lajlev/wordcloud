@@ -470,7 +470,7 @@ function placeWords() {
   var centerMode = CENTER_MODES[state.center].id;
   if (centerMode === 'name') {
     var nameMeas = measureText(CENTER_NAME, CENTER_NAME_SIZE, fontSet.serif);
-    placed.push({ obb: makeOBB(cx, cy, nameMeas.w / 2 + 20, CENTER_NAME_SIZE * 0.55 + 10, 0) });
+    placed.push({ obb: makeOBB(cx, cy, nameMeas.w / 2 + 20, CENTER_NAME_SIZE * 0.55 + 10, 0), isExclusion: true });
   }
 
   for (var wi = 0; wi < words.length; wi++) {
@@ -567,6 +567,7 @@ function renderSVG(placements) {
 
   for (var i = 0; i < placements.length; i++) {
     var p = placements[i];
+    if (p.isExclusion) continue;
     var angleDeg = (p.angle * 180 / Math.PI).toFixed(2);
     var op = (0.78 + 0.22 * (p.count / DATA.words[0].count)).toFixed(2);
     parts.push(
