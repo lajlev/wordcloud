@@ -487,12 +487,8 @@ function placeWords() {
 
     for (var step = 0; step < maxSteps; step++) {
       var pos;
-      if (layoutId === 'horizontal') {
-        pos = spiralRectangular(step, cx, cy, 3);
-      } else {
-        var spiralA = layoutId === 'classic' ? 1.2 : layoutId === 'starburst' ? 2.0 : 1.6;
-        pos = spiralArchimedean(step, cx, cy, spiralA, 1.4, 1.0);
-      }
+      var spiralA = layoutId === 'classic' ? 1.2 : layoutId === 'horizontal' ? 1.8 : layoutId === 'starburst' ? 2.0 : 1.6;
+      pos = spiralArchimedean(step, cx, cy, spiralA, 1.4, 1.0);
 
       var angle = getWordAngle(layoutId, wi, words.length, rng, pos.x, pos.y, cx, cy);
 
@@ -562,7 +558,7 @@ function renderSVG(placements) {
   } else if (centerMode === 'name') {
     parts.push('<text x="' + cx + '" y="' + cy + '" text-anchor="middle" dominant-baseline="central"' +
       ' font-family="' + escAttr(titleFont) + '" font-size="' + CENTER_NAME_SIZE + '"' +
-      ' fill="' + palette.colors[0] + '" opacity="0.18">' + escXml(CENTER_NAME) + '</text>');
+      ' fill="' + palette.colors[0] + '" opacity="0.4">' + escXml(CENTER_NAME) + '</text>');
   }
 
   for (var i = 0; i < placements.length; i++) {
