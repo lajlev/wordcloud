@@ -4,6 +4,8 @@ const path = require('path');
 
 const data = JSON.parse(fs.readFileSync(path.join(__dirname, 'sample-data.json'), 'utf-8'));
 const dataJSON = JSON.stringify(data);
+const photoB64 = fs.readFileSync(path.join(__dirname, 'anne-face.jpg')).toString('base64');
+const photoDataURI = 'data:image/jpeg;base64,' + photoB64;
 
 const html = `<!DOCTYPE html>
 <html lang="no">
@@ -177,6 +179,10 @@ const html = `<!DOCTYPE html>
     <span class="control-label">Layout</span>
     <div class="toggle-group" id="layout-toggles"></div>
   </div>
+  <div class="control-row">
+    <span class="control-label">Center</span>
+    <div class="toggle-group" id="center-toggles"></div>
+  </div>
 </div>
 
 <div id="canvas-wrapper">
@@ -185,6 +191,7 @@ const html = `<!DOCTYPE html>
 
 <script>
 var DATA = ${dataJSON};
+var PHOTO_URI = '${photoDataURI}';
 
 // ── Palettes ──
 var PALETTES = [
@@ -258,11 +265,23 @@ var LAYOUTS = [
   { name: 'Starburst', id: 'starburst' }
 ];
 
+// ── Center Modes ──
+var CENTER_MODES = [
+  { name: 'Words Only', id: 'none' },
+  { name: 'Photo', id: 'photo' },
+  { name: 'Name', id: 'name' }
+];
+var PHOTO_RADIUS = 120;
+var PHOTO_EXCLUSION_R = 140;
+var CENTER_NAME = 'Anne';
+var CENTER_NAME_SIZE = 110;
+
 // ── State ──
 var state = {
   palette: 0,
   fonts: 0,
   layout: 0,
+  center: 0,
   seed: 42
 };
 
@@ -346,6 +365,18 @@ function isInBounds(obb, W, H, margin) {
     }
   }
   return true;
+}
+
+// ── Circle-OBB Collision ──
+function circleOBBOverlap(cirX, cirY, cirR, obb) {
+  var dx = cirX - obb.cx, dy = cirY - obb.cy;
+  var cos = Math.cos(-obb.angle), sin = Math.sin(-obb.angle);
+  var localX = dx * cos - dy * sin;
+  var localY = dx * sin + dy * cos;
+  var closestX = Math.max(-obb.hw, Math.min(obb.hw, localX));
+  var closestY = Math.max(-obb.hh, Math.min(obb.hh, localY));
+  var distX = localX - closestX, distY = localY - closestY;
+  return (distX * distX + distY * distY) <= cirR * cirR;
 }
 
 // ── Spiral generators ──
@@ -436,6 +467,12 @@ function placeWords() {
   var cy = (MARGIN + CLOUD_BOTTOM) / 2;
   var placed = [];
 
+  var centerMode = CENTER_MODES[state.center].id;
+  if (centerMode === 'name') {
+    var nameMeas = measureText(CENTER_NAME, CENTER_NAME_SIZE, fontSet.serif);
+    placed.push({ obb: makeOBB(cx, cy, nameMeas.w / 2 + 20, CENTER_NAME_SIZE * 0.55 + 10, 0) });
+  }
+
   for (var wi = 0; wi < words.length; wi++) {
     var word = words[wi];
     var fontSize = calcFontSize(word.count, minC, maxC, minFontSize, maxFontSize);
@@ -470,10 +507,15 @@ function placeWords() {
 
       var obb = makeOBB(pos.x, pos.y, hw, hh, angle);
       var overlaps = false;
-      for (var pi = 0; pi < placed.length; pi++) {
-        if (obbOverlap(obb, placed[pi].obb)) {
-          overlaps = true;
-          break;
+      if (centerMode === 'photo' && circleOBBOverlap(cx, cy, PHOTO_EXCLUSION_R, obb)) {
+        overlaps = true;
+      }
+      if (!overlaps) {
+        for (var pi = 0; pi < placed.length; pi++) {
+          if (obbOverlap(obb, placed[pi].obb)) {
+            overlaps = true;
+            break;
+          }
         }
       }
 
@@ -506,8 +548,22 @@ function renderSVG(placements) {
   var fontSet = FONT_SETS[state.fonts];
   var titleFont = '"' + fontSet.serif + '", ' + fontSet.serifFallback;
 
+  var palette = PALETTES[state.palette];
+  var centerMode = CENTER_MODES[state.center].id;
+  var cx = SVG_W / 2, cy = (MARGIN + CLOUD_BOTTOM) / 2;
+
   var parts = [];
   parts.push('<rect width="1190" height="842" fill="white"/>');
+
+  if (centerMode === 'photo') {
+    parts.push('<defs><clipPath id="photo-clip"><circle cx="' + cx + '" cy="' + cy + '" r="' + PHOTO_RADIUS + '"/></clipPath></defs>');
+    parts.push('<circle cx="' + cx + '" cy="' + cy + '" r="' + (PHOTO_RADIUS + 3) + '" fill="none" stroke="#d8c8b8" stroke-width="2.5"/>');
+    parts.push('<image href="' + PHOTO_URI + '" x="' + (cx - PHOTO_RADIUS - 10) + '" y="' + (cy - PHOTO_RADIUS - 10) + '" width="' + (PHOTO_RADIUS * 2 + 20) + '" height="' + (PHOTO_RADIUS * 2 + 20) + '" clip-path="url(#photo-clip)" preserveAspectRatio="xMidYMid slice"/>');
+  } else if (centerMode === 'name') {
+    parts.push('<text x="' + cx + '" y="' + cy + '" text-anchor="middle" dominant-baseline="central"' +
+      ' font-family="' + escAttr(titleFont) + '" font-size="' + CENTER_NAME_SIZE + '"' +
+      ' fill="' + palette.colors[0] + '" opacity="0.18">' + escXml(CENTER_NAME) + '</text>');
+  }
 
   for (var i = 0; i < placements.length; i++) {
     var p = placements[i];
@@ -575,6 +631,15 @@ function buildToggles() {
     layBox.appendChild(btn);
   });
 
+  var cenBox = document.getElementById('center-toggles');
+  CENTER_MODES.forEach(function(mode, i) {
+    var btn = document.createElement('button');
+    btn.className = 'toggle-btn' + (i === state.center ? ' active' : '');
+    btn.textContent = mode.name;
+    btn.onclick = function() { state.center = i; updateToggles(); regenerate(); };
+    cenBox.appendChild(btn);
+  });
+
   document.getElementById('btn-shuffle').onclick = function() {
     state.seed = Math.floor(Math.random() * 100000);
     regenerate();
@@ -588,7 +653,8 @@ function updateToggles() {
   var groups = [
     { el: 'palette-toggles', val: state.palette },
     { el: 'font-toggles', val: state.fonts },
-    { el: 'layout-toggles', val: state.layout }
+    { el: 'layout-toggles', val: state.layout },
+    { el: 'center-toggles', val: state.center }
   ];
   groups.forEach(function(g) {
     var btns = document.getElementById(g.el).children;
