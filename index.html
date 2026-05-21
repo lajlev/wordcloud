@@ -130,6 +130,107 @@
     transition: opacity 0.15s ease;
   }
 
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(40,30,25,0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 100;
+  }
+  .modal-overlay[hidden] { display: none; }
+  .modal-card {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 8px 50px rgba(0,0,0,0.25);
+    padding: 28px 32px;
+    width: 100%;
+    max-width: 520px;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  .modal-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #444;
+    margin-bottom: 18px;
+  }
+  .modal-field { margin-bottom: 16px; }
+  .modal-field label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: #888;
+    margin-bottom: 6px;
+  }
+  .modal-field input,
+  .modal-field textarea {
+    width: 100%;
+    border: 2px solid #e0d8d0;
+    border-radius: 10px;
+    padding: 9px 12px;
+    font-size: 13px;
+    font-family: inherit;
+    color: #444;
+  }
+  .modal-field textarea {
+    resize: vertical;
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    line-height: 1.5;
+  }
+  .modal-field input:focus,
+  .modal-field textarea:focus {
+    outline: none;
+    border-color: #a08070;
+  }
+  .modal-hint {
+    font-size: 11px;
+    color: #999;
+    margin-top: 6px;
+  }
+  .modal-hint code {
+    background: #f5f0eb;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 11px;
+  }
+  .modal-example {
+    background: #f5f0eb;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-top: 6px;
+    font-size: 11px;
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    color: #777;
+    line-height: 1.5;
+    white-space: pre;
+  }
+  .modal-error {
+    color: #c0392b;
+    font-size: 12px;
+    margin-bottom: 12px;
+  }
+  .modal-error[hidden] { display: none; }
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  .modal-primary {
+    border-color: #a08070;
+    background: #a08070;
+    color: white;
+  }
+  .modal-primary:hover {
+    border-color: #8a6a5a;
+    background: #8a6a5a;
+    color: white;
+  }
+
   @media print {
     body {
       background: white;
@@ -157,6 +258,7 @@
     <span class="control-label">Palette</span>
     <div class="toggle-group" id="palette-toggles"></div>
     <div class="action-group">
+      <button class="action-btn" id="btn-data" title="Edit data">&#9998; Data</button>
       <button class="action-btn" id="btn-shuffle" title="Shuffle">&#8635; Shuffle</button>
       <button class="action-btn" id="btn-download" title="Download SVG">&#8681; SVG</button>
       <button class="action-btn" id="btn-print" title="Print / PDF">&#9113; Print</button>
@@ -178,6 +280,34 @@
 
 <div id="canvas-wrapper">
   <svg id="cloud-svg" viewBox="0 0 1190 842" xmlns="http://www.w3.org/2000/svg"></svg>
+</div>
+
+<div id="data-modal" class="modal-overlay" hidden>
+  <div class="modal-card">
+    <h2 class="modal-title">Edit word data</h2>
+    <div class="modal-field">
+      <label for="inp-title">Title</label>
+      <input type="text" id="inp-title" placeholder="My Word Cloud">
+    </div>
+    <div class="modal-field">
+      <label for="inp-name">Center name</label>
+      <input type="text" id="inp-name" placeholder="Anne">
+    </div>
+    <div class="modal-field">
+      <label for="inp-csv">Words (CSV)</label>
+      <textarea id="inp-csv" rows="12" placeholder="word,count"></textarea>
+      <p class="modal-hint">One entry per line, format <code>word,count</code>. Example:</p>
+      <pre class="modal-example">word,count
+inspirerende,14
+varm,12
+omsorgsfull,11</pre>
+    </div>
+    <p class="modal-error" id="data-error" hidden></p>
+    <div class="modal-actions">
+      <button class="action-btn" id="btn-data-cancel">Cancel</button>
+      <button class="action-btn modal-primary" id="btn-data-apply">Apply</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -635,6 +765,16 @@ function buildToggles() {
 
   document.getElementById('btn-download').onclick = downloadSVG;
   document.getElementById('btn-print').onclick = function() { window.print(); };
+
+  document.getElementById('btn-data').onclick = openDataModal;
+  document.getElementById('btn-data-cancel').onclick = closeDataModal;
+  document.getElementById('btn-data-apply').onclick = applyData;
+  document.getElementById('data-modal').onclick = function(e) {
+    if (e.target.id === 'data-modal') closeDataModal();
+  };
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeDataModal();
+  });
 }
 
 function updateToggles() {
@@ -661,6 +801,63 @@ function downloadSVG() {
   a.download = 'wordcloud.svg';
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+// ── Data Modal ──
+function wordsToCSV(words) {
+  return words.map(function(w) { return w.word + ',' + w.count; }).join('\n');
+}
+
+function parseCSV(text) {
+  var lines = text.split(/\r?\n/);
+  var words = [];
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (!line) continue;
+    var ci = line.indexOf(',');
+    var word, count;
+    if (ci === -1) {
+      word = line;
+      count = 1;
+    } else {
+      word = line.slice(0, ci).trim();
+      count = parseInt(line.slice(ci + 1).trim(), 10);
+    }
+    if (!word) continue;
+    if (word.toLowerCase() === 'word' && isNaN(count)) continue; // skip header row
+    if (isNaN(count) || count < 1) count = 1;
+    words.push({ word: word, count: count });
+  }
+  return words;
+}
+
+function openDataModal() {
+  document.getElementById('inp-title').value = DATA.title || '';
+  document.getElementById('inp-name').value = CENTER_NAME || '';
+  document.getElementById('inp-csv').value = wordsToCSV(DATA.words);
+  document.getElementById('data-error').hidden = true;
+  document.getElementById('data-modal').hidden = false;
+}
+
+function closeDataModal() {
+  document.getElementById('data-modal').hidden = true;
+}
+
+function applyData() {
+  var words = parseCSV(document.getElementById('inp-csv').value);
+  var err = document.getElementById('data-error');
+  if (words.length === 0) {
+    err.textContent = 'No valid words found. Use one "word,count" entry per line.';
+    err.hidden = false;
+    return;
+  }
+  words.sort(function(a, b) { return b.count - a.count; });
+  var title = document.getElementById('inp-title').value.trim();
+  DATA = { title: title || 'Word Cloud', words: words };
+  CENTER_NAME = document.getElementById('inp-name').value.trim() || 'Anne';
+  document.title = DATA.title;
+  closeDataModal();
+  regenerate();
 }
 
 // ── URL Params ──
